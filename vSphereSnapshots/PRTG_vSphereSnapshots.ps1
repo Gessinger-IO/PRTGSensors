@@ -1,16 +1,33 @@
 [CmdletBinding()] param(
-    [Parameter()] $server = $null,
-    [Parameter()] $user = $null,
-    [Parameter()] $password = $null
+    [Parameter(Mandatory=$true)]
+	[string]$server = $null,
+    [Parameter(Mandatory=$true)]
+	[string]$user = $null,
+	[Parameter(Mandatory=$true)]
+	[string]$password = $null,
+	[Parameter(ParameterSetName="setAge", Mandatory=$true)]
+	[AllowNull()]
+    [Nullable[System.Int32]]$maxAge,
+	[Parameter(ParameterSetName="setSize", Mandatory=$true)]
+	[AllowNull()]
+    [Nullable[System.Int32]]$maxMb,
+	[Parameter(Mandatory=$false)]
+	[switch]$allLinked = $false
 )
 
-
 Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false -Confirm:$false >$null 2>&1
-Connect-VIserver $server -user $user -Password $password -Force
+$command = "Connect-VIserver $server -user $user -Password $password $(&{If($allLinked) {'-AllLinked'}}) -Force"
+Invoke-Expression -Command $command >$null 2>&1
 $data = @()
 $tags = Get-Tag -Name "allow Snapshots" -Category "snapshots"
 $snapvms = Get-VM -Tag $tags
-$vms = Get-VM | Where { $snapvms -notcontains $_ }
+$vms = Get-VM | Where-Object { $snapvms -notcontains $_ }
+$message = ""
+if($null -ne $maxAge) {
+	$message = "Snapshots older than $($maxAge) hours"
+} elseif($null -ne $maxMb) {
+	$message = "Snapshots bigger than $($maxMb) MB"
+}
 foreach ($snap in $vms | Get-Snapshot)
 {
 	$snapshot = New-Object PSCustomObject
@@ -19,28 +36,36 @@ foreach ($snap in $vms | Get-Snapshot)
 	$snapshot | Add-Member -type NoteProperty -name Name $snap.Name
 	$snapshot | Add-Member -type NoteProperty -name SizeMB $snap.sizemb
 	$snapshot | Add-Member -type NoteProperty -name created $snap.created
-	if ($snapevent -ne $null) {
+	if ($null -ne $snapevent) {
 		$snapshot | Add-Member -type NoteProperty -name CreatedBy $snapevent.UserName
 	}
 	else {
 		$snapshot | Add-Member -type NoteProperty -name CreatedBy "UnKnown"
 	}
-	if($snapshot.created -lt (Get-Date).AddHours(-72)) {
-		$data += $snapshot
+	if($null -ne $maxAge) {
+		if($snapshot.created -lt (Get-Date).AddHours(($maxDays * -1))) {
+			$data += $snapshot
+		}
+	} elseif($null -ne $maxMb) {
+		if($snapshot.SizeMB -gt $maxMb) {
+			$data += $snapshot
+		}
+	} else {
+		throw "Missing parameter maxAge or maxMb"
 	}
 }
 
-$count = $data | measure | Select-Object -expand Count
+$count = $data | Measure-Object | Select-Object -expand Count
 
 Disconnect-ViServer -Confirm:$false
 
 Write-Host "<prtg>
     <result>
-        <channel>Snapshots older than 72 hours</channel>
+        <channel>$($message)</channel>
         <value>$($count)</value>
         <unit>Count</unit>
         <limitmode>1</limitmode>
         <limitmaxwarning>0.5</limitmaxwarning>
-        <limitwarningmsg>Snapshots older than 72 hours: $([string[]]$data -join ', ')</limitwarningmsg>
+        <limitwarningmsg>$($message): $([string[]]$data -join ', ')</limitwarningmsg>
     </result>
 </prtg>"
