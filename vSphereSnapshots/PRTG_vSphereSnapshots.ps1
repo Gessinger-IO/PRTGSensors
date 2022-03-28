@@ -43,7 +43,7 @@ foreach ($snap in $vms | Get-Snapshot)
         $snapshot | Add-Member -type NoteProperty -name CreatedBy "UnKnown"
     }
     if($null -ne $maxAge) {
-        if($snapshot.created -lt (Get-Date).AddHours(($maxDays * -1))) {
+        if($snapshot.created -lt (Get-Date).AddHours(($maxAge * -1))) {
             $data += $snapshot
         }
     } elseif($null -ne $maxMb) {
@@ -59,13 +59,18 @@ $count = $data | Measure-Object | Select-Object -expand Count
 
 Disconnect-ViServer -Confirm:$false
 
+if($count -gt 0) {
+	$message = "$($message): $([string[]]$data -join ', ')"
+} else {
+	$message = "OK"
+}
 Write-Host "<prtg>
+    <text>$($message)</text>
     <result>
-        <channel>$($message)</channel>
+        <channel>SnapshotCount</channel>
         <value>$($count)</value>
         <unit>Count</unit>
         <limitmode>1</limitmode>
         <limitmaxwarning>0.5</limitmaxwarning>
-        <limitwarningmsg>$($message): $([string[]]$data -join ', ')</limitwarningmsg>
     </result>
 </prtg>"
