@@ -8,7 +8,9 @@ Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false -Confirm:$false 
 Connect-VIserver $server -user $user -Password $password -Force
 $data = @()
 $tags = Get-Tag -Name "allow ISO" -Category "Monitoring"
+$isofolders = Get-Folder -Tag $tag
 $isovms = Get-VM -Tag $tags
+$isovms += $folder | Get-VM
 $vms = Get-VM | Get-CDDrive | select @{N="VM";E="Parent"},IsoPath | where {$_.IsoPath -ne $null -and $isovms.Name -notcontains $_.VM }
 foreach ($vm in $vms)
 {
