@@ -20,7 +20,9 @@ $command = "Connect-VIserver $server -user $user -Password $password $(&{If($all
 Invoke-Expression -Command $command >$null 2>&1
 $data = @()
 $tags = Get-Tag -Name "allow Snapshots" -Category "snapshots"
+$snapfolders = Get-Folder -Tag $tags
 $snapvms = Get-VM -Tag $tags
+$snapvms += $snapfolders | Get-VM
 $vms = Get-VM | Where-Object { $snapvms -notcontains $_ }
 $message = ""
 if($null -ne $maxAge) {
